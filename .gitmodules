@@ -1,0 +1,8 @@
+[submodule "components/primesense-openni2-winusb"]
+	path = components/primesense-openni2-winusb
+	url = https://github.com/mattavallone/primesense-openni2-winusb.git
+	branch = main
+[submodule "components/primesense-viewer"]
+	path = components/primesense-viewer
+	url = https://github.com/mattavallone/primesense-viewer.git
+	branch = main

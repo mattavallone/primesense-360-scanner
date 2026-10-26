@@ -1,0 +1,83 @@
+cmake_minimum_required(VERSION 3.10)
+project(3dscan_to_stl)
+
+set(CMAKE_CXX_STANDARD 11)
+set(CMAKE_CXX_STANDARD_REQUIRED True)
+
+set(OpenCV_DIR "C:/opencv/build")
+set(OpenNI_DIR "C:/Program Files/OpenNI2")
+
+find_package(OpenCV REQUIRED)
+find_library(OpenNI2_LIBRARY OpenNI2 HINTS "${OpenNI_DIR}/Lib")
+if(NOT OpenNI2_LIBRARY)
+    message(FATAL_ERROR "OpenNI2 library not found. Set OpenNI_DIR to its installation.")
+endif()
+
+add_executable(3dscan_to_stl main.cpp)
+
+set(PRIMESENSE_COMPONENTS_DIR "${CMAKE_SOURCE_DIR}/components")
+set(PRIMESENSE_RUNTIME_DIR
+    "${PRIMESENSE_COMPONENTS_DIR}/primesense-openni2-winusb")
+set(PRIMESENSE_VIEWER_DIR
+    "${PRIMESENSE_COMPONENTS_DIR}/primesense-viewer")
+
+add_executable(primesense_viewer
+    "${PRIMESENSE_VIEWER_DIR}/primesense_viewer.cpp")
+add_executable(primesense_winusb_probe
+    "${PRIMESENSE_RUNTIME_DIR}/primesense_winusb_probe.cpp")
+target_link_libraries(primesense_winusb_probe PRIVATE SetupAPI WinUSB Ole32 Uuid)
+
+target_include_directories(3dscan_to_stl PRIVATE
+    "${OpenNI_DIR}/Include"
+    ${OpenCV_INCLUDE_DIRS}
+)
+target_include_directories(primesense_viewer PRIVATE
+    "${OpenNI_DIR}/Include"
+    ${OpenCV_INCLUDE_DIRS}
+)
+target_link_libraries(3dscan_to_stl PRIVATE ${OpenCV_LIBS} ${OpenNI2_LIBRARY})
+target_link_libraries(primesense_viewer PRIVATE ${OpenCV_LIBS} ${OpenNI2_LIBRARY})
+
+set_target_properties(3dscan_to_stl PROPERTIES
+    RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}/bin"
+)
+
+set_target_properties(primesense_viewer PROPERTIES
+    RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}/bin"
+)
+
+set_target_properties(primesense_winusb_probe PROPERTIES
+    RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}/bin"
+)
+
+if(WIN32)
+    find_program(POWERSHELL_EXECUTABLE NAMES powershell.exe powershell)
+    if(NOT POWERSHELL_EXECUTABLE)
+        message(FATAL_ERROR "PowerShell is required to build the WinUSB OpenNI2 driver.")
+    endif()
+
+    add_custom_command(TARGET 3dscan_to_stl POST_BUILD
+        COMMAND "${POWERSHELL_EXECUTABLE}" -NoProfile -ExecutionPolicy Bypass
+            -File "${PRIMESENSE_RUNTIME_DIR}/Prepare-OpenNI2-Runtime.ps1"
+            -RedistDir "${OpenNI_DIR}/Redist"
+            -OutputDir "$<TARGET_FILE_DIR:3dscan_to_stl>"
+        VERBATIM
+    )
+
+    add_custom_command(TARGET primesense_viewer POST_BUILD
+        COMMAND "${POWERSHELL_EXECUTABLE}" -NoProfile -ExecutionPolicy Bypass
+            -File "${PRIMESENSE_RUNTIME_DIR}/Prepare-OpenNI2-Runtime.ps1"
+            -RedistDir "${OpenNI_DIR}/Redist"
+            -OutputDir "$<TARGET_FILE_DIR:primesense_viewer>"
+        VERBATIM
+    )
+
+    add_custom_target(build_winusb_openni
+        COMMAND "${POWERSHELL_EXECUTABLE}" -NoProfile -ExecutionPolicy Bypass
+            -File "${PRIMESENSE_RUNTIME_DIR}/Build-OpenNI2-WinUSB.ps1"
+            -BuildDir "${CMAKE_BINARY_DIR}"
+            -OutputDriverDir "$<TARGET_FILE_DIR:3dscan_to_stl>/OpenNI2/Drivers"
+        VERBATIM
+    )
+    add_dependencies(build_winusb_openni 3dscan_to_stl)
+endif()
